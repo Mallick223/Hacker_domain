@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas, security
 from ..database import get_db
+from typing import List
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -41,3 +42,11 @@ def login(payload: schemas.UserLogin, db: Session = Depends(get_db)):
 @router.get("/me", response_model=schemas.UserOut)
 def get_me(current_user: models.User = Depends(security.get_current_user)):
     return current_user
+
+
+@router.get("/users", response_model=List[schemas.UserOut])
+def list_users(db: Session = Depends(get_db)):
+    """List all users — used by the admin dashboard. In production,
+    restrict this to admin-only requests."""
+    users = db.query(models.User).all()
+    return [schemas.UserOut.model_validate(u) for u in users]
