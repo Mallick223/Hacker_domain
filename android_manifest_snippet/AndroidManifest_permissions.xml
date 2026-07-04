@@ -1,0 +1,10 @@
+<!--
+  Add these permissions inside the <manifest> tag of:
+  android/app/src/main/AndroidManifest.xml
+
+  (Above the <application> tag)
+-->
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />

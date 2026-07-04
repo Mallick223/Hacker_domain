@@ -1,0 +1,37 @@
+name: tourist_safety_app
+description: Smart Tourist Safety Monitoring System - Mobile App
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  # Networking
+  http: ^1.2.0
+
+  # Local storage (auth token, cached user)
+  shared_preferences: ^2.2.2
+
+  # Location
+  geolocator: ^11.0.0
+  permission_handler: ^11.3.0
+
+  # Map (OpenStreetMap - no API key required)
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.1
+
+  # State management (lightweight)
+  provider: ^6.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
