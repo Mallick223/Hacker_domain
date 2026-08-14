@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GUARDIAN AI - Safety Risk Prediction Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="layout-container">
+        <!-- Sidebar Navigation -->
+        <aside class="app-sidebar">
+            <div class="sidebar-brand">
+                <i class="fa-solid fa-shield-halved logo-icon"></i>
+                <div class="logo-text">
+                    <h1>GUARDIAN <span class="logo-badge">AI</span></h1>
+                    <p>Tourist Risk Scoring Engine</p>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-tab="view-monitor">
+                    <i class="fa-solid fa-chart-line"></i>
+                    <span>Live Monitor</span>
+                </button>
+                <button class="nav-item" data-tab="view-simulator">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>Simulator Deck</span>
+                </button>
+                <button class="nav-item" data-tab="view-diagnostics">
+                    <i class="fa-solid fa-brain"></i>
+                    <span>Diagnostics & Logs</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="system-status">
+                    <span class="status-indicator" id="api-status">
+                        <span class="status-dot pulsing"></span> Connecting...
+                    </span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="content-area">
+            <!-- Dynamic Content Header -->
+            <header class="content-header">
+                <div class="header-info">
+                    <h2 id="view-title">Live Monitor</h2>
+                    <p id="view-subtitle">Real-time tourist telemetry & predictive risk scoring</p>
+                </div>
+            </header>
+
+            <!-- TAB 1: LIVE MONITOR -->
+            <div id="view-monitor" class="tab-view active">
+                <div class="view-grid monitor-grid">
+                    
+                    <!-- Left: Real-time Feeds (Camera & Map) -->
+                    <div class="grid-col wide-col">
+                        <!-- Webcam Feeds with scanning overlays -->
+                        <section class="card camera-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-camera"></i> Vision Analysis Feed</h3>
+                                <div class="card-badges">
+                                    <span class="badge badge-outline" id="camera-status-badge">Standby</span>
+                                </div>
+                            </div>
+                            <div class="webcam-container">
+                                <video id="webcam" autoplay playsinline muted></video>
+                                <canvas id="photo-canvas" style="display:none;"></canvas>
+                                <div class="camera-overlay" id="camera-overlay">Webcam Active</div>
+                                
+                                <!-- Scanner HUD Graphics -->
+                                <div class="scanner-hud" id="scanner-hud">
+                                    <div class="scanner-line"></div>
+                                    <div class="scanner-corners">
+                                        <span class="corner tl"></span>
+                                        <span class="corner tr"></span>
+                                        <span class="corner bl"></span>
+                                        <span class="corner br"></span>
+                                    </div>
+                                    <div class="scanner-target">
+                                        <div class="target-box"></div>
+                                        <div class="target-ping"></div>
+                                    </div>
+                                    <div class="scanner-label">FACIAL Telemetry: ACTIVE</div>
+                                </div>
+
+                                <div class="camera-placeholder" id="camera-placeholder">
+                                    <i class="fa-solid fa-video-slash"></i>
+                                    <p>Camera feed disabled</p>
+                                </div>
+                            </div>
+                            <div class="camera-controls">
+                                <button id="btn-start-camera" class="btn btn-secondary"><i class="fa-solid fa-video"></i> Toggle Camera</button>
+                                <button id="btn-capture" class="btn btn-primary" disabled><i class="fa-solid fa-expand"></i> Capture & Analyze Frame</button>
+                            </div>
+                            <div class="photo-preview-container" style="display: none;" id="preview-box">
+                                <img id="captured-img" src="" alt="Captured Frame">
+                                <div class="preview-info">
+                                    <h4>Captured Frame Cache</h4>
+                                    <p>Used for emotion and drowsiness extraction</p>
+                                </div>
+                                <button id="btn-clear-capture" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i> Reset</button>
+                            </div>
+                        </section>
+
+                        <!-- Route Map Card -->
+                        <section class="card map-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-map-location-dot"></i> Geolocation & Route Tracker</h3>
+                                <div class="map-actions">
+                                    <button id="btn-gps-track" class="btn btn-secondary btn-sm"><i class="fa-solid fa-location-crosshairs"></i> Track Real GPS</button>
+                                    <button id="btn-clear-route" class="btn btn-danger btn-sm"><i class="fa-solid fa-road-barrier"></i> Reset Route</button>
+                                </div>
+                            </div>
+                            
+                            <div id="map-container"></div>
+                            
+                            <div class="map-metrics">
+                                <div class="metric-badge">
+                                    <span class="badge-icon"><i class="fa-solid fa-route text-blue"></i></span>
+                                    <div class="badge-data">
+                                        <span class="badge-label">Deviation Distance</span>
+                                        <span class="badge-value" id="val-deviation">0.0 m</span>
+                                    </div>
+                                </div>
+                                <div class="metric-badge">
+                                    <span class="badge-icon"><i class="fa-solid fa-gauge text-cyan"></i></span>
+                                    <div class="badge-data">
+                                        <span class="badge-label">Current Speed</span>
+                                        <span class="badge-value" id="val-speed">5.5 km/h</span>
+                                    </div>
+                                </div>
+                                <div class="metric-badge">
+                                    <span class="badge-icon"><i class="fa-solid fa-hourglass-half text-orange"></i></span>
+                                    <div class="badge-data">
+                                        <span class="badge-label">Stationary Time</span>
+                                        <span class="badge-value" id="val-stationary">0.0 min</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="map-instruction">
+                                <p><i class="fa-solid fa-circle-info"></i> <strong>Simulation Instructions:</strong> Click points on the map to define the tourist's planned route, double-click to finalize. Click off-route to simulate a detour anomaly.</p>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- Right: Safety Output Metrics -->
+                    <div class="grid-col narrow-col">
+                        <!-- Main Risk Score -->
+                        <section class="card risk-card" id="risk-band-card">
+                            <div class="risk-gauge-outer">
+                                <div class="risk-gauge-container">
+                                    <svg class="risk-gauge" viewBox="0 0 100 100">
+                                        <circle class="gauge-bg" cx="50" cy="50" r="42"></circle>
+                                        <circle class="gauge-fill" id="gauge-fill-circle" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="264"></circle>
+                                    </svg>
+                                    <div class="gauge-text">
+                                        <span class="risk-value" id="risk-value">0.0</span>
+                                        <span class="risk-percent">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="risk-status">
+                                <span class="risk-band-title">RISK FACTOR LEVEL</span>
+                                <h2 class="risk-band-name" id="risk-band-name">SAFE</h2>
+                                <p class="risk-meta" id="risk-update-time">Initializing connections...</p>
+                            </div>
+                        </section>
+
+                        <!-- SOS Button with Flip Cover Safety Lock -->
+                        <section class="card sos-card">
+                            <div class="sos-wrapper">
+                                <!-- Closed cover state -->
+                                <div class="sos-cover" id="sos-cover">
+                                    <div class="cover-handle"></div>
+                                    <div class="cover-content">
+                                        <i class="fa-solid fa-triangle-exclamation warning-icon"></i>
+                                        <h4>EMERGENCY SOS LINK</h4>
+                                        <p>Emergency trigger is protected. Flip open cover to expose SOS control.</p>
+                                        <button id="btn-lift-cover" class="btn btn-danger"><i class="fa-solid fa-folder-open"></i> Flip Open Cover</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Active exposed state -->
+                                <div class="sos-exposed hidden" id="sos-exposed">
+                                    <div class="exposed-header">
+                                        <p class="text-red font-bold"><i class="fa-solid fa-radiation"></i> TRIGGER EXPOSED</p>
+                                        <button id="btn-close-cover" class="btn btn-secondary btn-sm"><i class="fa-solid fa-xmark"></i> Close Cover</button>
+                                    </div>
+                                    <div class="sos-btn-holder">
+                                        <button id="btn-sos" class="btn-sos">
+                                            <div class="sos-glow"></div>
+                                            <!-- SVG progress track for hold mechanism -->
+                                            <svg class="sos-hold-ring" viewBox="0 0 100 100">
+                                                <circle class="ring-bg" cx="50" cy="50" r="44"></circle>
+                                                <circle class="ring-fill" id="sos-hold-fill" cx="50" cy="50" r="44" stroke-dasharray="276" stroke-dashoffset="276"></circle>
+                                            </svg>
+                                            <span class="sos-inner-label">HOLD SOS</span>
+                                        </button>
+                                    </div>
+                                    <p class="sos-hint">Press and hold button for 2 seconds to initiate distress broadcast.</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Active Escalation alerts -->
+                        <section class="card alerts-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-bell"></i> Escalation Decisions</h3>
+                            </div>
+                            <div class="alerts-grid">
+                                <div class="alert-item" id="alert-notify_tourist">
+                                    <i class="fa-solid fa-circle-exclamation alert-icon"></i>
+                                    <div class="alert-info">
+                                        <h4>Notify Tourist</h4>
+                                        <p>In-app vibration & push alert</p>
+                                    </div>
+                                    <span class="alert-status">OFF</span>
+                                </div>
+                                <div class="alert-item" id="alert-alert_family">
+                                    <i class="fa-solid fa-user-shield alert-icon"></i>
+                                    <div class="alert-info">
+                                        <h4>Alert Family</h4>
+                                        <p>SMS notification to emergency group</p>
+                                    </div>
+                                    <span class="alert-status">OFF</span>
+                                </div>
+                                <div class="alert-item" id="alert-alert_police">
+                                    <i class="fa-solid fa-building-shield alert-icon"></i>
+                                    <div class="alert-info">
+                                        <h4>Alert Police</h4>
+                                        <p>Dispatch location telemetry to law enforcement</p>
+                                    </div>
+                                    <span class="alert-status">OFF</span>
+                                </div>
+                                <div class="alert-item" id="alert-dispatch_emergency">
+                                    <i class="fa-solid fa-truck-medical alert-icon"></i>
+                                    <div class="alert-info">
+                                        <h4>Dispatch Rescue</h4>
+                                        <p>Direct ambulance routing request</p>
+                                    </div>
+                                    <span class="alert-status">OFF</span>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- TAB 2: SIMULATOR DECK -->
+            <div id="view-simulator" class="tab-view">
+                <div class="view-grid simulator-grid">
+                    
+                    <!-- Left: Parameters & Context sliders -->
+                    <div class="grid-col wide-col">
+                        <section class="card parameters-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-user-gear"></i> Telemetry Override Simulation</h3>
+                                <p class="card-desc">Override telemetry sensors to test XGBoost Risk Fusion rules.</p>
+                            </div>
+                            
+                            <div class="sliders-list">
+                                <!-- Heart Rate -->
+                                <div class="slider-widget">
+                                    <div class="slider-widget-header">
+                                        <label for="slide-hr"><i class="fa-solid fa-heartbeat text-red"></i> Biometric Heart Rate</label>
+                                        <span class="slider-display-val" id="val-hr">72 BPM</span>
+                                    </div>
+                                    <div class="slider-control-wrapper">
+                                        <button type="button" class="btn-adjust" data-control="slide-hr" data-delta="-5"><i class="fa-solid fa-minus"></i></button>
+                                        <input type="range" id="slide-hr" min="40" max="180" value="72">
+                                        <button type="button" class="btn-adjust" data-control="slide-hr" data-delta="5"><i class="fa-solid fa-plus"></i></button>
+                                    </div>
+                                </div>
+
+                                <!-- Crime Index -->
+                                <div class="slider-widget">
+                                    <div class="slider-widget-header">
+                                        <label for="slide-crime"><i class="fa-solid fa-shield-halved text-orange"></i> Regional Crime Index</label>
+                                        <span class="slider-display-val" id="val-crime">15%</span>
+                                    </div>
+                                    <div class="slider-control-wrapper">
+                                        <button type="button" class="btn-adjust" data-control="slide-crime" data-delta="-5"><i class="fa-solid fa-minus"></i></button>
+                                        <input type="range" id="slide-crime" min="0" max="100" value="15">
+                                        <button type="button" class="btn-adjust" data-control="slide-crime" data-delta="5"><i class="fa-solid fa-plus"></i></button>
+                                    </div>
+                                </div>
+
+                                <!-- Crowd Density -->
+                                <div class="slider-widget">
+                                    <div class="slider-widget-header">
+                                        <label for="slide-crowd"><i class="fa-solid fa-people-group text-blue"></i> Crowd Density</label>
+                                        <span class="slider-display-val" id="val-crowd">0.40 p/m²</span>
+                                    </div>
+                                    <div class="slider-control-wrapper">
+                                        <button type="button" class="btn-adjust" data-control="slide-crowd" data-delta="-0.2"><i class="fa-solid fa-minus"></i></button>
+                                        <input type="range" id="slide-crowd" min="0" max="6" step="0.05" value="0.4">
+                                        <button type="button" class="btn-adjust" data-control="slide-crowd" data-delta="0.2"><i class="fa-solid fa-plus"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="selectors-grid">
+                                <div class="control-group">
+                                    <label for="select-weather"><i class="fa-solid fa-cloud-sun"></i> Simulated Weather</label>
+                                    <select id="select-weather">
+                                        <option value="clear">Clear Skies</option>
+                                        <option value="cloudy">Overcast / Cloudy</option>
+                                        <option value="rain">Light Rain</option>
+                                        <option value="heavy_rain">Heavy Torrential Rain</option>
+                                        <option value="storm">Severe Thunderstorm</option>
+                                        <option value="fog">Dense Fog / Low Visibility</option>
+                                        <option value="snow">Snow / Ice Hazard</option>
+                                        <option value="extreme_heat">Extreme Heat</option>
+                                        <option value="heatwave">Severe Heatwave Alert</option>
+                                    </select>
+                                </div>
+
+                                <div class="control-group">
+                                    <label for="select-geofence"><i class="fa-solid fa-draw-polygon"></i> Safety Boundary Status</label>
+                                    <select id="select-geofence">
+                                        <option value="inside">Inside Safe Area</option>
+                                        <option value="near_boundary">Approaching Geofence Border</option>
+                                        <option value="outside">Outside Safefence</option>
+                                        <option value="no_go_zone">Critical Restricted No-Go Zone</option>
+                                    </select>
+                                </div>
+
+                                <div class="control-group">
+                                    <label for="select-hour"><i class="fa-solid fa-clock"></i> Hour of Event</label>
+                                    <select id="select-hour">
+                                        <option value="12">12:00 (Midday)</option>
+                                        <option value="16">16:00 (Afternoon)</option>
+                                        <option value="20">20:00 (Dusk / Evening)</option>
+                                        <option value="23">23:00 (Night Time)</option>
+                                        <option value="2">02:00 (Midnight Danger Period)</option>
+                                        <option value="6">06:00 (Dawn / Morning)</option>
+                                        <option value="9">09:00 (Morning Rush)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- Right: IMU wave simulations -->
+                    <div class="grid-col narrow-col">
+                        <section class="card sensor-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-wave-square"></i> Inertial Sensors (IMU Activity)</h3>
+                                <p class="card-desc">Live synthetic 3-axis accelerometer waveform generation.</p>
+                            </div>
+                            <div class="sensor-simulation">
+                                <div class="waveform-container">
+                                    <canvas id="sensor-canvas"></canvas>
+                                </div>
+                                <div class="preset-label">SELECT ACTIVITY STATE PRESET</div>
+                                <div class="preset-buttons">
+                                    <button class="btn btn-preset active" data-class="2"><i class="fa-solid fa-chair"></i> Sitting</button>
+                                    <button class="btn btn-preset" data-class="3"><i class="fa-solid fa-person"></i> Standing</button>
+                                    <button class="btn btn-preset" data-class="5"><i class="fa-solid fa-person-walking"></i> Walking</button>
+                                    <button class="btn btn-preset" data-class="1"><i class="fa-solid fa-person-running"></i> Jogging</button>
+                                    <button class="btn btn-preset" data-class="4"><i class="fa-solid fa-stairs"></i> Upstairs</button>
+                                    <button class="btn btn-preset" data-class="0"><i class="fa-solid fa-stairs fa-flip-vertical"></i> Downstairs</button>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- TAB 3: DIAGNOSTICS & TELEMETRY -->
+            <div id="view-diagnostics" class="tab-view">
+                <div class="view-grid diagnostics-grid-layout">
+                    
+                    <!-- Left: Diagnostics grid -->
+                    <div class="grid-col wide-col">
+                        <!-- SHAP explaining -->
+                        <section class="card explain-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-brain"></i> SHAP Heuristic Explanations</h3>
+                                <p class="card-desc">Real-time classification contribution weightings for the XGBoost model.</p>
+                            </div>
+                            <div class="explain-list" id="explain-list">
+                                <div class="explain-empty">No active sensor telemetry available. Adjust simulation sliders to compile.</div>
+                            </div>
+                        </section>
+
+                        <!-- Sub-model scores -->
+                        <section class="card diagnostics-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-microscope"></i> Perception Pipeline Sub-Models</h3>
+                                <p class="card-desc">Individual neural networks output metrics feeding into Decision engine.</p>
+                            </div>
+                            <div class="diagnostics-grid">
+                                <div class="diagnostic-item">
+                                    <span class="diag-label">Activity (HAR)</span>
+                                    <span class="diag-value" id="diag-har">-</span>
+                                    <span class="diag-sub" id="diag-har-conf">CNN+LSTM</span>
+                                </div>
+                                <div class="diagnostic-item">
+                                    <span class="diag-label">Fall Detection</span>
+                                    <span class="diag-value" id="diag-fall">-</span>
+                                    <span class="diag-sub" id="diag-fall-conf">MobileNetV3</span>
+                                </div>
+                                <div class="diagnostic-item">
+                                    <span class="diag-label">Emotion Scoring</span>
+                                    <span class="diag-value" id="diag-emotion">-</span>
+                                    <span class="diag-sub" id="diag-emotion-conf">FER2013 CNN</span>
+                                </div>
+                                <div class="diagnostic-item">
+                                    <span class="diag-label">Drowsiness</span>
+                                    <span class="diag-value" id="diag-drowsy">-</span>
+                                    <span class="diag-sub" id="diag-drowsy-conf">MRL Eye CNN</span>
+                                </div>
+                                <div class="diagnostic-item">
+                                    <span class="diag-label">Route Anomaly</span>
+                                    <span class="diag-value" id="diag-route">-</span>
+                                    <span class="diag-sub">Isolation Forest</span>
+                                </div>
+                                <div class="diagnostic-item">
+                                    <span class="diag-label">Heart Rate Anomaly</span>
+                                    <span class="diag-value" id="diag-hr">-</span>
+                                    <span class="diag-sub">Z-Score Index</span>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- Right: Live Json logs -->
+                    <div class="grid-col narrow-col">
+                        <section class="card logs-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-code"></i> Live JSON Telemetry logs</h3>
+                                <div class="logs-actions">
+                                    <button id="btn-clear-logs" class="btn btn-secondary btn-sm"><i class="fa-solid fa-eraser"></i> Clear console</button>
+                                </div>
+                            </div>
+                            <div class="logs-console" id="logs-console">
+                                <pre><code class="language-json" id="logs-code">Waiting for system updates...</code></pre>
+                            </div>
+                        </section>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Leaflet.js and Dashboard Code -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="app.js"></script>
+</body>
+</html>
