@@ -1,101 +1,93 @@
-# Tourist Safety App — Flutter Module
+# Guardian Go — Postgres migration + SOS redundancy
 
-Covers: **Registration, Login, Live Tracking, SOS Button** — the mobile-app
-layer of the Smart Tourist Safety Monitoring System.
+Your actual layout is `D:\project_major\tourist_safety_backend\backend\`
+with the FastAPI package at `app\`. Here's where each file in this bundle
+goes, and what to do after copying.
 
-Uses OpenStreetMap via `flutter_map` so no Google Maps API key is required
-to run this out of the box. Swap in `google_maps_flutter` later if you want.
+## File placement
 
-## 1. Setup
+| This bundle                     | Goes to (relative to `backend\`)              | Action |
+|----------------------------------|------------------------------------------------|--------|
+| `database.py`                    | `app\database.py`                              | **Replace** |
+| `config.py`                      | `app\config.py`                                | **Replace** |
+| `sos.py`                         | `app\routers\sos.py`                           | **Replace** |
+| `sos_queue.py`                   | `app\sos_queue.py`                             | New file |
+| `sos_worker.py`                  | `app\sos_worker.py`                            | New file |
+| `sos_dispatch_model.py`          | contents **appended** to `app\models.py`       | Merge in |
+| `migrate_sqlite_to_postgres.py`  | `backend\migrate_sqlite_to_postgres.py`        | New file (note: sits in `backend\`, not `app\`, so `from app...` imports work) |
+| `docker-compose.yml`             | `D:\project_major\docker-compose.yml` (repo root) | New file |
+| `.env.example`                   | copy to `backend\.env` and fill in             | New file |
+| `alembic.ini`                    | `backend\alembic.ini`                          | New file |
+| `alembic\env.py`, `alembic\script.py.mako` | `backend\alembic\...`               | New files |
+| `requirements-additions.txt`     | append lines into `backend\requirements.txt` (wherever your real one lives — the `app\` copy you showed was empty, so check if there's one at `backend\` root) | Merge in |
 
-```bash
-flutter create --project-name tourist_safety_app .   # if starting fresh, or
-flutter pub get                                       # if you already have a Flutter project
+## Setup order
+
+```powershell
+cd D:\project_major\tourist_safety_backend\backend
+
+# 1. Add the new dependencies
+#    (merge requirements-additions.txt into your real requirements.txt, then:)
+pip install -r requirements.txt
+
+# 2. Copy .env.example to .env and adjust if you changed docker-compose creds
+copy .env.example .env
+
+# 3. Start Postgres + Redis
+cd D:\project_major
+docker-compose up -d
+cd tourist_safety_backend\backend
+
+# 4. Create the Alembic migration that captures your current schema
+#    (this generates the "initial" migration from your existing models,
+#    including the new SosDispatchAttempt table once you've merged it in)
+alembic revision --autogenerate -m "initial schema incl. sos_dispatch_attempts"
+alembic upgrade head
+
+# 5. Copy your existing data from the old SQLite file into Postgres
+python migrate_sqlite_to_postgres.py tourist_safety.db
+
+# 6. Start the app as usual, PLUS the new worker process (separate terminal)
+uvicorn app.main:app --reload
+python -m app.sos_worker
 ```
 
-Copy the contents of this `lib/` folder into your Flutter project's `lib/` folder,
-and merge `pubspec.yaml` dependencies into yours.
+## Important: `main.py` no longer needs `Base.metadata.create_all`
 
-### Android permissions
-Merge the contents of `android_manifest_snippet/AndroidManifest_permissions.xml`
-into `android/app/src/main/AndroidManifest.xml`, above the `<application>` tag.
+Now that Alembic owns schema creation, remove this line from `app\main.py`:
 
-Also set `minSdkVersion 21` or higher in `android/app/build.gradle`.
-
-### iOS permissions
-Add to `ios/Runner/Info.plist`:
-```xml
-<key>NSLocationWhenInUseUsageDescription</key>
-<string>We need your location to keep you safe and enable live tracking.</string>
-<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-<string>We need background location to alert authorities in an emergency.</string>
+```python
+Base.metadata.create_all(bind=engine)
 ```
 
-## 2. Point it at your backend
+Alembic (`alembic upgrade head`) replaces it — running both isn't harmful,
+but it defeats the point of having migrations at all (silent schema drift
+between environments).
 
-Edit `lib/config.dart` and set `baseUrl` to your Django/FastAPI server.
+## What changed, in one paragraph each
 
-## 3. Expected backend API contract
+**Postgres**: Both backend configurations now require `DATABASE_URL` and
+reject SQLite URLs at startup. The database engines use connection pooling
+(10 steady connections, 20 burst, pre-ping to avoid stale-connection errors).
+SQLite remains supported only as a source for the one-off migration script.
 
-Your backend needs to expose these endpoints (matches the "Cloud Backend API"
-box in your architecture diagram):
+**SOS redundancy**: the old `_dispatch_alert` stub ran inline in the
+request and only printed to console — a slow or failing real integration
+(Twilio, a webhook) would block the tourist's SOS request, and a failure
+left no record. Now `POST /api/sos` pushes a job to Redis and returns
+immediately; `sos_worker.py` (a separate process) does the actual
+notification work with exponential backoff (10s → 20s → 40s → ... capped
+at 5 min) across up to 5 attempts, logs every attempt to the new
+`sos_dispatch_attempts` table, and pushes to a dead-letter list if all
+retries fail — so a failed SOS notification is visible to the admin
+dashboard (`GET /api/sos/{id}/dispatch-log`) instead of vanishing. If
+Redis itself is down, `enqueue_dispatch` falls back to an inline attempt
+rather than silently dropping the SOS — this was a deliberate call for the
+one endpoint in your system where losing a message actually matters.
 
-### `POST /api/auth/register`
-Request:
-```json
-{
-  "name": "Jane Doe",
-  "email": "jane@example.com",
-  "phone": "+911234567890",
-  "password": "secret123",
-  "emergency_contact": "+919876543210"
-}
-```
-Response (200/201):
-```json
-{
-  "token": "jwt-or-session-token",
-  "user": { "id": "1", "name": "Jane Doe", "email": "jane@example.com", "phone": "+911234567890" }
-}
-```
+## For your academic writeup
 
-### `POST /api/auth/login`
-Request: `{ "email": "...", "password": "..." }`
-Response: same shape as register.
-
-### `POST /api/location/update`
-Header: `Authorization: Bearer <token>`
-Request:
-```json
-{ "lat": 19.0760, "lng": 72.8777, "speed": 1.2, "heading": 90.0, "timestamp": "2026-07-03T10:00:00Z" }
-```
-
-### `POST /api/sos`
-Header: `Authorization: Bearer <token>`
-Request:
-```json
-{ "lat": 19.0760, "lng": 72.8777, "timestamp": "2026-07-03T10:00:00Z", "message": "Emergency SOS triggered by user" }
-```
-This is where your backend's Decision & Alert Engine should fan the alert
-out to Authorities/Rescue, Family Members, and Emergency Services.
-
-## 4. Run it
-
-```bash
-flutter run
-```
-
-## 5. What's included vs. what's next
-
-**Included in this module:**
-- Registration & login screens with validation and token persistence (`shared_preferences`)
-- Live GPS tracking on an OpenStreetMap view, pushed to the backend every ~15s (configurable)
-- SOS button with confirmation dialog, sends current location + timestamp to backend
-
-**Not included yet (from your full architecture):**
-- Digital ID (blockchain) — separate module, needs backend blockchain integration first
-- Safe zone / geo-fence alerts — needs zone polygons from backend; straightforward to add once that API exists
-- Incident reporting (voice/image/text) — can extend the SOS flow with a form + file upload
-- Push notifications (Firebase Cloud Messaging) — needed for the "Tourist Alerts" box
-
-Happy to build any of these next.
+This maps cleanly onto a "Decision & Alert Engine" diagram: SOS trigger →
+queue → async fan-out with retry/dead-letter, which is a standard resilient-
+dispatch pattern (similar in spirit to what SQS + Lambda DLQs do in AWS,
+just self-hosted with Redis for a student project's infra budget).

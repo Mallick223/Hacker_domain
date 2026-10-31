@@ -56,7 +56,7 @@ class LocationService {
     _positionSub = Geolocator.getPositionStream(locationSettings: settings)
         .listen((position) {
       onUpdate(position);
-      _pushLocationToServer(position);
+      unawaited(sendLocationToServer(position));
     });
   }
 
@@ -65,11 +65,11 @@ class LocationService {
     _positionSub = null;
   }
 
-  Future<void> _pushLocationToServer(Position position) async {
-    final token = await _auth.getToken();
-    if (token == null) return;
-
+  Future<void> sendLocationToServer(Position position) async {
     try {
+      final token = await _auth.getToken();
+      if (token == null) return;
+
       await http.post(
         Uri.parse(AppConfig.locationUpdateEndpoint),
         headers: {
@@ -84,9 +84,6 @@ class LocationService {
           'timestamp': DateTime.now().toIso8601String(),
         }),
       );
-    } catch (_) {
-      // Silently ignore network failures here; consider queuing
-      // updates locally and retrying if you need offline resilience.
-    }
+    } catch (_) {}
   }
 }

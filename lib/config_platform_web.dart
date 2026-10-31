@@ -1,1 +1,1 @@
-const String platformBaseUrl = 'http://localhost:8000/api';
+const String platformBaseUrl = 'http://127.0.0.1:8000/api';

@@ -19,23 +19,35 @@ class SosService {
       throw Exception('You must be logged in to send an SOS alert.');
     }
 
-    final response = await http.post(
-      Uri.parse(AppConfig.sosEndpoint),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'lat': position.latitude,
-        'lng': position.longitude,
-        'timestamp': DateTime.now().toIso8601String(),
-        'message': message ?? 'Emergency SOS triggered by user',
-      }),
-    );
+    final endpoint = AppConfig.sosEndpoint;
 
-    if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception('Failed to send SOS alert (${response.statusCode}). '
-          'Please call local emergency services directly if this persists.');
+    try {
+      final response = await http.post(
+        Uri.parse(endpoint),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'lat': position.latitude,
+          'lng': position.longitude,
+          'timestamp': DateTime.now().toIso8601String(),
+          'message': message ?? 'Emergency SOS triggered by user',
+        }),
+      );
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception(
+          'SOS backend rejected the request at $endpoint '
+          '(HTTP ${response.statusCode}). '
+          'Check that your FastAPI server is running and the API_BASE_URL matches your environment.',
+        );
+      }
+    } on http.ClientException {
+      throw Exception(
+        'Could not reach the SOS backend at $endpoint. '
+        'Start the API server or set API_BASE_URL to the correct host for this device.',
+      );
     }
   }
 }

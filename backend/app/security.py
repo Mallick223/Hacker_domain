@@ -1,54 +1,26 @@
-from datetime import datetime, timedelta
-from typing import Optional
-import bcrypt
-from jose import JWTError, jwt
+import os
+import firebase_admin
+from firebase_admin import credentials, auth as firebase_auth
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-from .config import settings
 from .database import get_db
 from . import models
 
-# tokenUrl is just used for OpenAPI docs; the actual login endpoint is /api/auth/login
+# tokenUrl is unused now (Firebase handles login client-side) but kept so
+# FastAPI's OpenAPI docs still render an auth field in Swagger UI.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_error=False)
 
+# Path to the service account JSON you downloaded from the Firebase console.
+# Keep this file OUT of git (add to .gitignore).
+_SERVICE_ACCOUNT_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "firebase-service-account.json"
+)
 
-def hash_password(password: str) -> str:
-    # bcrypt has a hard 72-byte input limit; truncate defensively.
-    password_bytes = password.encode("utf-8")[:72]
-    hashed = bcrypt.hashpw(password_bytes, bcrypt.gensalt())
-    return hashed.decode("utf-8")
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    password_bytes = plain_password.encode("utf-8")[:72]
-    return bcrypt.checkpw(password_bytes, hashed_password.encode("utf-8"))
-
-
-def create_access_token(subject: str, expires_minutes: Optional[int] = None) -> str:
-    expire = datetime.utcnow() + timedelta(
-        minutes=expires_minutes or settings.access_token_expire_minutes
-    )
-    payload = {"sub": subject, "exp": expire}
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
-
-
-def decode_access_token(token: str) -> str:
-    """Returns the subject (user id as string), or raises HTTPException."""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-        return user_id
-    except JWTError:
-        raise credentials_exception
+if not firebase_admin._apps:
+    cred = credentials.Certificate(_SERVICE_ACCOUNT_PATH)
+    firebase_admin.initialize_app(cred)
 
 
 def get_current_user(
@@ -61,8 +33,48 @@ def get_current_user(
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    user_id = decode_access_token(token)
-    user = db.query(models.User).filter(models.User.id == int(user_id)).first()
+
+    try:
+        decoded = firebase_auth.verify_id_token(token)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    uid = decoded.get("uid")
+    email = decoded.get("email", "")
+    name = decoded.get("name", "")
+    if not uid or not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Firebase account must include a UID and email address",
+        )
+
+    user = db.query(models.User).filter(models.User.firebase_uid == uid).first()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        user = db.query(models.User).filter(models.User.email == email).first()
+        if user is not None:
+            if not decoded.get("email_verified", False):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Verify your Firebase email before linking this existing account.",
+                )
+            user.firebase_uid = uid
+            db.commit()
+            db.refresh(user)
+            return user
+
+        user = models.User(
+            firebase_uid=uid,
+            name=name or (email.split("@")[0] if email else "Unknown"),
+            email=email,
+            phone="",
+            hashed_password=None,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
     return user

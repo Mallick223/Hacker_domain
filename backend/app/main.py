@@ -1,12 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import Base, engine
 from .routers import auth, location, sos
-
-# Creates tables on startup if they don't exist yet.
-# For production, use Alembic migrations instead.
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Smart Tourist Safety Monitoring System API",

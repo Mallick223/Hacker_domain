@@ -18,19 +18,17 @@ pip install -r requirements.txt
 
 ## 2. Configure
 
-Defaults live in `app/config.py` and can be overridden via a `.env` file:
+`DATABASE_URL` is required and must point to PostgreSQL. Set it in the
+environment or in a `.env` file in the backend directory:
 
 ```env
-DATABASE_URL=sqlite:///./tourist_safety.db
+DATABASE_URL=postgresql://user:password@localhost:5432/tourist_safety
 SECRET_KEY=some-long-random-string
 ACCESS_TOKEN_EXPIRE_MINUTES=10080
 ```
 
-For production, point `DATABASE_URL` at Postgres, e.g.:
-```
-DATABASE_URL=postgresql://user:password@localhost:5432/tourist_safety
-```
-(Also add `psycopg2-binary` to requirements.txt if using Postgres.)
+The backend rejects missing or non-PostgreSQL database URLs at startup.
+SQLite is supported only as a source by the one-off migration script.
 
 **Set a real `SECRET_KEY` before deploying** — the default is a placeholder.
 

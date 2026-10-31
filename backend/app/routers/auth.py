@@ -32,7 +32,11 @@ def register(payload: schemas.UserRegister, db: Session = Depends(get_db)):
 @router.post("/login", response_model=schemas.AuthResponse)
 def login(payload: schemas.UserLogin, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
-    if not user or not security.verify_password(payload.password, user.hashed_password):
+    if (
+        not user
+        or not user.hashed_password
+        or not security.verify_password(payload.password, user.hashed_password)
+    ):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     token = security.create_access_token(subject=str(user.id))
@@ -42,6 +46,23 @@ def login(payload: schemas.UserLogin, db: Session = Depends(get_db)):
 @router.get("/me", response_model=schemas.UserOut)
 def get_me(current_user: models.User = Depends(security.get_current_user)):
     return current_user
+
+
+@router.patch("/me", response_model=schemas.UserOut)
+def update_me(
+    payload: schemas.UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user),
+):
+    if payload.name is not None:
+        current_user.name = payload.name
+    if payload.phone is not None:
+        current_user.phone = payload.phone
+    if payload.emergency_contact is not None:
+        current_user.emergency_contact = payload.emergency_contact
+    db.commit()
+    db.refresh(current_user)
+    return schemas.UserOut.model_validate(current_user)
 
 
 @router.get("/users", response_model=List[schemas.UserOut])

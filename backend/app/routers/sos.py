@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import models, schemas, security
+from .. import models, schemas, security, sos_queue
 from ..database import get_db
 
 router = APIRouter(prefix="/api/sos", tags=["sos"])
@@ -26,26 +26,12 @@ def trigger_sos(
     db.commit()
     db.refresh(alert)
 
-    # ---- Decision & Alert Engine hook ----
-    # This is where you'd fan the alert out to:
-    #   - Authorities/Rescue (e.g. push to a police dispatch API / webhook)
-    #   - Family members (e.g. SMS via Twilio to current_user.emergency_contact)
-    #   - Emergency services (e.g. notify nearest responder by geo-lookup)
-    # Kept as a stub so you can plug in real integrations without
-    # changing the request/response contract the mobile app relies on.
-    _dispatch_alert(current_user, alert)
+    # Queue notification work outside this request; the worker records each
+    # attempt and retries failures. If Redis is unavailable, the queue module
+    # falls back to an inline attempt so the SOS is not silently dropped.
+    sos_queue.enqueue_dispatch(alert.id)
 
     return alert
-
-
-def _dispatch_alert(user: models.User, alert: models.SosAlert) -> None:
-    """Stub for fanning the SOS out to authorities / family / emergency
-    services. Replace the print with real Twilio/webhook/FCM calls."""
-    print(
-        f"[SOS DISPATCH] User {user.name} ({user.phone}) triggered SOS at "
-        f"({alert.lat}, {alert.lng}). Emergency contact: {user.emergency_contact}. "
-        f"Message: {alert.message}"
-    )
 
 
 @router.get("/my", response_model=List[schemas.SosOut])
@@ -74,6 +60,26 @@ def all_sos_alerts(
     if status:
         query = query.filter(models.SosAlert.status == status)
     return query.all()
+
+
+@router.get("/{alert_id}/dispatch-log")
+def sos_dispatch_log(alert_id: int, db: Session = Depends(get_db)):
+    """Return all recorded dispatch attempts for an SOS alert."""
+    attempts = (
+        db.query(models.SosDispatchAttempt)
+        .filter(models.SosDispatchAttempt.alert_id == alert_id)
+        .order_by(models.SosDispatchAttempt.attempt_number)
+        .all()
+    )
+    return [
+        {
+            "attempt_number": attempt.attempt_number,
+            "status": attempt.status,
+            "error": attempt.error,
+            "created_at": attempt.created_at,
+        }
+        for attempt in attempts
+    ]
 
 
 @router.patch("/{alert_id}/status", response_model=schemas.SosOut)

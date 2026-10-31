@@ -11,10 +11,11 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    firebase_uid = Column(String, unique=True, index=True, nullable=True)
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     phone = Column(String, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True)
     emergency_contact = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -58,3 +59,28 @@ class SosAlert(Base):
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
 
     user = relationship("User", back_populates="sos_alerts")
+
+
+class DispatchStatus(str, enum.Enum):
+    pending = "pending"       # queued, not yet attempted
+    success = "success"       # delivered
+    retrying = "retrying"     # failed at least once, will retry
+    dead_letter = "dead_letter"  # exhausted retries — needs human attention
+
+
+class SosDispatchAttempt(Base):
+    """
+    Audit trail for SOS fan-out (authorities / family / emergency services).
+    One row per attempt, so you can see exactly what was tried, when, and
+    why it failed — instead of the old print()-only stub.
+    """
+    __tablename__ = "sos_dispatch_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    alert_id = Column(Integer, ForeignKey("sos_alerts.id"), nullable=False, index=True)
+    attempt_number = Column(Integer, nullable=False, default=1)
+    status = Column(Enum(DispatchStatus), default=DispatchStatus.pending, nullable=False, index=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    alert = relationship("SosAlert")

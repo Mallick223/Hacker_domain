@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "948816848136",
+    "project_id": "guardian03",
+    "storage_bucket": "guardian03.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:948816848136:android:12edd9b101b98dec3b78bd",
+        "android_client_info": {
+          "package_name": "com.example.tourist_safety_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCxrJlKw9ax5jnRaswCzRPi9_zYuWtXI6E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
